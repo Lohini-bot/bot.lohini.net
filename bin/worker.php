@@ -6,7 +6,7 @@ use Nette\Utils\Strings;
 use Nette\Utils\Json;
 
 require_once __DIR__ . '/../vendor/autoload.php';
-Debugger::enable(FALSE, __DIR__ . '/../log', 'hosiplan@gmail.com');
+Debugger::enable(FALSE, __DIR__ . '/../log', 'bot@lohini.net');
 Debugger::$strictMode = TRUE;
 
 function run($command, $data = array()) {
