@@ -1,7 +1,8 @@
 <?php // vim: ts=4 sw=4 ai:
 
 use Nette\Application\Routers\Route,
-	Nette\Utils\Json;
+	Nette\Utils\Json,
+	Lohini\Utils\Network;
 
 define('WWW_DIR', __DIR__);
 define('ROOT_DIR', realpath(__DIR__.'/..'));
@@ -34,6 +35,9 @@ $router[]=new Route('<server>/<command>', function ($server, $command) use ($con
 
 	switch ($server) {
 		case 'github':
+			if (!Network::hostInCIDR(Network::getRemoteIP(), '192.30.252.0/22')) {
+				return json('Invalid remote.', 'error');
+				}
 			if ($req->getHeader('x-github-event')==='ping') {
 				return json('pong');
 				}
