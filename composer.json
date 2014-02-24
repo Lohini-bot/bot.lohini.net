@@ -1,7 +1,11 @@
 {
-    "require":{
-        "php":">=5.3.2",
-        "nette/nette":"@dev"
-    },
-    "minimum-stability":"dev"
+		"require": {
+		"php": ">=5.4",
+		"nette/nette": "2.1.*@dev",
+		"apigen/apigen": "@dev"
+	},
+	"require-dev": {
+		"jsmitka/nette-xdebug-helper": "@dev"
+	},
+	"minimum-stability": "dev"
 }

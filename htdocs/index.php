@@ -3,43 +3,101 @@
 use Nette\Application\Routers\Route,
 	Nette\Utils\Json;
 
-require_once __DIR__.'/../vendor/autoload.php';
+define('WWW_DIR', __DIR__);
+define('ROOT_DIR', realpath(__DIR__.'/..'));
 
-$configurator=new \Nette\Config\Configurator;
-$configurator->enableDebugger(__DIR__.'/../log', 'bot@lohini.net');
-$configurator->setTempDirectory(__DIR__.'/../temp');
+$umask=umask(0);
+
+require_once ROOT_DIR.'/vendor/autoload.php';
+
+require_once ROOT_DIR.'/libs/Configurator.php';
+$configurator=new \Configurator;
+$configurator->addConfig(ROOT_DIR.'/config/config.neon')
+	->setTempDirectory($configurator->preparedParameters['tempdir']);
 $container=$configurator->createContainer();
+$configurator->enableDebugger($container->parameters['logdir'], $container->parameters['email']);
 
 function json($msg, $status='ok') {
-	return new \Nette\Application\Responses\JsonResponse(array('status' => $status, $status => $msg));
+	return new \Nette\Application\Responses\JsonResponse(['status' => $status, $status => $msg]);
 	}
 
 // Setup router
-$container->router[]=new Route('<command>', function($command) use ($container) {
-	if ( ! $container->httpRequest->isPost()) {
+$router=$container->getService('router');
+$router[]=new Route('<server>/<command>', function ($server, $command) use ($container) {
+	if (!isset($container->parameters[$server])) {
+		return json('Invalid server.', 'error');
+		}
+	$req=$container->getService('httpRequest');
+	if (!$req->isPost()) {
 		return json('Please, use POST method.', 'error');
 		}
 
-	$req=$container->httpRequest;
-	if ($command==='git-split' && $req->getHeader('x-github-event')==='push') {
-		try {
-			$file=tempnam(__DIR__.'/../bin/queue', $command.'.');
-			file_put_contents($file, Json::encode(Json::decode($req->getPost('payload'))));
-			chmod($file, 0777);
-			}
-		catch (\Nette\Utils\JsonException $e) {
-			return json('Invalid JSON motherfucker.', 'error');
-			}
+	switch ($server) {
+		case 'github':
+			if ($req->getHeader('x-github-event')==='ping') {
+				return json('pong');
+				}
+			if ($req->getHeader('x-github-event')!=='push') {
+				return json('Invalid data.', 'error');
+				}
+			$data=$req->getPost('payload');
+			break;
+		case 'gitlab':
+			$data=file_get_contents('php://input');
+			break;
 		}
-	else {
-		return json('Unknown command '.$command, 'error');
+
+	try {
+		$json=Json::decode($data, Json::FORCE_ARRAY);
 		}
+	catch (\Nette\Utils\JsonException $e) {
+		return json('Invalid JSON motherfucker.', 'error');
+		}
+	if (!isset($json['repository']['url'])
+		|| !isset($container->parameters[$server][$url=$json['repository']['url']])
+		|| !isset($container->parameters[$server][$url][$command])
+		) {
+		return json('Invalid data.', 'error');
+		}
+
+	$file=tempnam(ROOT_DIR.'/bin/queue', time()."-$server-$command.");
+	file_put_contents($file, Json::encode($json));
+	chmod($file, 0666);
 
 	return json('Thanks!');
-});
-$container->router[]=new Route('/', function() use ($container) {
-	return json('Please specify a command', 'error');
-});
+	});
+$router[]=new Route('/', function () use ($container) {
+	if ($container->getService('httpRequest')->isPost()) {
+		return json('Please specify a command', 'error');
+		}
+	$container->getService('httpResponse')->setContentType('text/plain');
+	return new \Nette\Application\Responses\TextResponse('
+                                  _____
+                                 |     |
+                                 | | | |
+                                 |_____|   Please specify a command
+                           ____ ___|_|___ ____
+                          ()___)         ()___)
+                          // /|           |\ \\\
+                         // / |           | \ \\\
+                        (___) |___________| (___)
+                        (___)   (_______)   (___)
+                        (___)     (___)     (___)
+                        (___)      |_|      (___)
+                        (___)  ___/___\___   | |
+                         | |  |           |  | |
+                         | |  |___________| /___\
+                        /___\  |||     ||| //   \\\
+                       //   \\\ |||     ||| \\\   //
+                       \\\   // |||     |||  \\\ //
+                        \\\ // ()__)   (__()
+                              ///       \\\\\
+                             ///         \\\\\
+                           _///___     ___\\\\\_
+                          |_______|   |_______|');
+	});
 
 // Configure and run the application!
-$container->application->run();
+$container->getService('application')->run();
+
+umask($umask);

@@ -1,0 +1,29 @@
+common:
+	parameters:
+		email: 'bot@lohini.mail'
+		pidfile: /var/run/lohini/bot-worker.pid
+		tempdir: %appDir%/../temp
+		logdir: %appDir%/../log
+		apigen: '--download --debug --colors=no --progressbar=no'
+		gitlab:
+			'gitlab@gitlab.lohini.net:Lopo/test.git':
+				git-split:
+					'lib/test2': 'gitlab@gitlab.lohini.net:Lopo/test2.git'
+				apigen:
+					'/': '/var/www/api.lohini.net/htdocs/test2api'
+			'gitlab@gitlab.lohini.net:Lohini/bot.git':
+				apigen:
+					'/': '/var/www/api.lohini.net/htdocs/bot'
+		github:
+			'https://github.com/Lohini/framework':
+				apigen:
+					'lib/Lohini': '/var/www/api.lohini.net/htdocs/framework'
+			'https://github.com/Lohini/CF':
+				git-split:
+					'lib/Lohini/Utils/Iban': 'git@github.com:Lohini/Iban.git'
+				apigen:
+					'lib/Lohini': '/var/www/api.lohini.net/htdocs/cf'
+
+production < common:
+
+development < common:

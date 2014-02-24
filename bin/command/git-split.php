@@ -2,21 +2,30 @@
 
 use Nette\Utils\Validators;
 
-function git_split($data)
+/**
+ * @param array $data
+ * @param array $splits
+ * @throws \Exception
+ */
+function git_split($data, array $splits)
 {
 	Validators::assertField($data, 'before', 'pattern:\w+');
 	Validators::assertField($data, 'after', 'pattern:\w+');
 
 	// working directory
-	$pwd=realpath(__DIR__.'/../../repository');
+	$repo=\Nette\Utils\Strings::webalize($url=$data['repository']['url']);
+	$pwd=realpath(ROOT_DIR.'/repository');
+	if (!file_exists($pwd.='/'.$repo)) {
+		mkdir($pwd);
+		}
 
 	// console
-	$cmd=function($command, $arg=NULL) use ($pwd) {
+	$cmd=function ($command, $arg=NULL) use ($pwd) {
 		$args=func_get_args();
 		array_shift($args); // command
 		$command=preg_replace_callback(
 			'~\%(\w)~',
-			function($m) use (&$args) {
+			function ($m) use (&$args) {
 				$arg=array_shift($args);
 				return $m[1]==='l'? $arg : escapeshellarg($arg);
 				},
@@ -25,20 +34,20 @@ function git_split($data)
 
 		exec(sprintf('cd %s && %s 2>&1', escapeshellarg($pwd), $command), $output, $status);
 		if (0!==$status) {
-			throw new Exception("Error occured while executing: `$command`\n\n".implode("\n", $output));
+			throw new \Exception("Error occured while executing: `$command`\n\n".implode("\n", $output));
 			}
 		debug("\$ `$command`", implode("\n", $output));
 		return $output;
 		};
-	$git=function($command, $arg=NULL) use ($cmd) {
-		return call_user_func_array($cmd, array('git '.$command)+func_get_args());
+	$git=function ($command, $arg=NULL) use ($cmd) {
+		return call_user_func_array($cmd, ['git '.$command]+func_get_args());
 		};
 
 	// functions
-	$fixRemotes=function($requireRemotes=array(), $actualRemotes=array()) use ($git, &$splits) {
+	$fixRemotes=function ($requireRemotes=[], $actualRemotes=[]) use ($git, &$splits) {
 		// parse splits
-		foreach ($splits as $dir => $meta) {
-			$requireRemotes[$meta['branch']]=$meta['target'];
+		foreach ($splits as $dir => $target) {
+			$requireRemotes[$dir]=$target;
 			}
 
 		// fetch actual remotes
@@ -58,32 +67,35 @@ function git_split($data)
 			}
 		};
 
-	$hasBranch=function($branch) use ($git) {
+	$hasBranch=function ($branch) use ($git) {
 		return in_array($branch, array_map(function ($b) { return trim(trim($b, '*')); }, $git('branch')));
 		};
 
-	$hasChanges=function($dir, $before, $after) use ($git, &$splits) {
-		$branch=$splits[$dir]['branch'];
+	$hasChanges=function ($dir, $before, $after) use ($git) {
 		return (bool)$git('diff --stat %l..%l -- %s', $before, $after, $dir);
 		};
 
-	$split=function($dir) use ($git, &$splits) {
-		$branch=$splits[$dir]['branch'];
+	$split=function ($dir) use ($git) {
+		$branch=$dir;
 		$git('subtree split -q -P %s -b %l', $dir, $branch);
 		$git('push %l %l:master', $branch, $branch);
 		};
 
-	$splitChanged=function($before, $after) use ($git, $hasBranch, $hasChanges, &$splits, $split) {
-		foreach ($splits as $dir => $meta) {
-			$git('fetch %l', $meta['branch']);
-			if (!($hadBranch=$hasBranch($meta['branch'])) || $hasChanges($dir, $before, $after)) {
+	$splitChanged=function ($before, $after) use ($git, $hasBranch, $hasChanges, &$splits, $split) {
+		foreach ($splits as $dir => $target) {
+			$git('fetch %l', $dir);
+			if (!($hadBranch=$hasBranch($dir)) || $hasChanges($dir, $before, $after)) {
 				if ($hadBranch) {
-					$git('branch -D %l', $meta['branch']);
+					$git('branch -D %l', $dir);
 					}
 				$split($dir);
 				}
 			}
 		};
+
+	if (!file_exists($pwd.'/.git')) {
+		$git('clone %s .', $url);
+		}
 
 	// be carefull about uncommited changes
 	if ($git('status --porcelain --untracked-files=no')) {
@@ -95,14 +107,7 @@ function git_split($data)
 	$git('checkout master');
 	$git('pull origin master');
 
-	// parse required splits
-	if (!file_exists($pwd.'/.split')) {
-		throw new Exception('No .split file');
-		}
-	$splits=parse_ini_file($pwd.'/.split', TRUE);
-
 	// process
 	$fixRemotes();
-	// $git('push origin master:master');
 	$splitChanged($data['before'], $data['after']);
 }
