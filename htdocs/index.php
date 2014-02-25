@@ -2,7 +2,8 @@
 
 use Nette\Application\Routers\Route,
 	Nette\Utils\Json,
-	Lohini\Utils\Network;
+	Lohini\Utils\Network,
+	Nette\Caching\Cache;
 
 define('WWW_DIR', __DIR__);
 define('ROOT_DIR', realpath(__DIR__.'/..'));
@@ -35,7 +36,37 @@ $router[]=new Route('<server>/<command>', function ($server, $command) use ($con
 
 	switch ($server) {
 		case 'github':
-			if (!Network::hostInCIDR(Network::getRemoteIP(), '192.30.252.0/22')) {
+			$cache=new Cache($container->getService('cacheStorage'), 'meta');
+			if (!($data=$cache->offsetGet('github'))) {
+				try {
+					$req=new \Kdyby\Curl\Request($container->parameters['githubmeta']);
+					$req->setUserAgent('firefox');
+					$data=Json::decode($req->get()->getResponse(), Json::FORCE_ARRAY);
+					}
+				catch (\Exception $e) {
+					$data['hooks']=['192.30.252.0/22'];
+					}
+				$cache->save(
+					'github',
+					$data,
+					[
+						Cache::CONSTS => [
+							'Nette\Framework::REVISION',
+							'Lohini\Framework::REVISION'
+							],
+						Cache::EXPIRE => 5*\Nette\DateTime::MINUTE
+						]
+					);
+				}
+			$valid=FALSE;
+			$ip=Network::getRemoteIP();
+			foreach ($data['hooks'] as $cidr) {
+				if (Network::hostInCIDR($ip, $cidr)) {
+					$valid=TRUE;
+					break;
+					}
+				}
+			if (!$valid) {
 				return json('Invalid remote.', 'error');
 				}
 			if ($req->getHeader('x-github-event')==='ping') {

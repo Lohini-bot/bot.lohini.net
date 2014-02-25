@@ -1,7 +1,8 @@
 {
 	"require": {
 		"lohini/framework": "0.4.*@dev",
-		"apigen/apigen": "@dev"
+		"apigen/apigen": "@dev",
+		"kdyby/curl": "@dev"
 	},
 	"minimum-stability": "dev"
 }
