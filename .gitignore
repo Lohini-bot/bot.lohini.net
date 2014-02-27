@@ -2,3 +2,4 @@ repository
 composer.lock
 composer.phar
 /nbproject
+config/config.local.neon
